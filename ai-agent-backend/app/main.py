@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException
 from .schemas import ChatRequest
 from .ai_engine import get_ai_response
 from .service import get_users, get_weather
+from .memory import extract_memory, get_chat_history, get_memory, save_memory, save_message
 
 app = FastAPI()
 
@@ -31,7 +32,23 @@ def execute_action(action: str, params: dict):
 @app.post("/chat")
 def chat(request: ChatRequest):
     try:
-        raw_decision = get_ai_response(request.message)
+        # 1) Save the incoming user message.
+        save_message(user_id=request.user_id, role="user", content=request.message)
+
+        # 2) Extract and persist long-term facts when available.
+        memory_update = extract_memory(request.message)
+        save_memory(user_id=request.user_id, memory_update=memory_update)
+
+        # 3) Build LLM context from short-term and long-term memory.
+        history = get_chat_history(request.user_id)
+        long_term_memory = get_memory(request.user_id)
+
+        # 4) Ask the model for a structured action decision.
+        raw_decision = get_ai_response(chat_history=history, user_memory=long_term_memory)
+
+        # 5) Save assistant message so future turns include model output.
+        save_message(user_id=request.user_id, role="assistant", content=raw_decision)
+
         decision = json.loads(_clean_json_text(raw_decision))
 
         action = decision.get("action")
