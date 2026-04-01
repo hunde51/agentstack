@@ -7,6 +7,7 @@ load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("gemini-2.5-flash")
 
+
 def get_ai_response(user_message: str):
     prompt = f"""
 You are an action selector for a backend API.
