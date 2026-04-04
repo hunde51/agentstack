@@ -29,3 +29,17 @@ def test_chat_success(mock_run, client):
 def test_chat_validation_empty_user(client):
     r = client.post("/chat", json={"user_id": "   ", "message": "hi"})
     assert r.status_code == 422
+
+
+@patch("app.main.run_agent")
+def test_chat_quota_error_returns_clean_429(mock_run, client):
+    mock_run.side_effect = Exception(
+        "Error code: 429 - {'error': {'message': 'You exceeded your current quota', "
+        "'type': 'insufficient_quota'}}"
+    )
+
+    r = client.post("/chat", json={"user_id": "u1", "message": "hi"})
+    assert r.status_code == 429
+    assert r.json()["detail"] == (
+        "Model provider quota is exhausted. Please check your API plan/billing, then try again."
+    )

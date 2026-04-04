@@ -52,8 +52,11 @@ def _build_prompt() -> ChatPromptTemplate:
         [
             (
                 "system",
-                "You are a backend agent. Use tools when needed to answer accurately. "
-                "Call exactly the most relevant tool when required, and then provide a concise final answer.",
+                "You are a helpful backend assistant. "
+                "Answer directly using your general knowledge when possible. "
+                "Use tools only when they are needed for live/system data (for example users or weather). "
+                "If a tool is not needed, do not call one. "
+                "Never claim you lack information about common general topics when you can answer directly.",
             ),
             ("human", "{input}"),
             MessagesPlaceholder("agent_scratchpad"),
@@ -112,6 +115,32 @@ def _parse_last_tool(steps: list) -> tuple[str | None, Any]:
     return tool_used, tool_result
 
 
+def _normalize_output_text(output: Any) -> str:
+    # Gemini/LangChain can return structured content blocks; extract readable text.
+    if isinstance(output, str):
+        return output
+
+    if isinstance(output, list):
+        text_parts: list[str] = []
+        for item in output:
+            if isinstance(item, str):
+                text_parts.append(item)
+                continue
+            if isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    text_parts.append(text)
+        if text_parts:
+            return "\n".join(part.strip() for part in text_parts if part.strip())
+
+    if isinstance(output, dict):
+        text = output.get("text")
+        if isinstance(text, str):
+            return text
+
+    return str(output)
+
+
 def run_agent(
     user_message: str,
     *,
@@ -127,7 +156,7 @@ def run_agent(
     result = executor.invoke({"input": full_input})
 
     output = result.get("output", "")
-    output_str = output if isinstance(output, str) else str(output)
+    output_str = _normalize_output_text(output)
 
     steps = result.get("intermediate_steps") or []
     tool_used, tool_result = _parse_last_tool(steps)

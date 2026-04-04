@@ -72,6 +72,14 @@ def ready():
 def _map_upstream_error(exc: Exception) -> HTTPException | None:
     name = type(exc).__name__
     low = str(exc).lower()
+    if "insufficient_quota" in low or "exceeded your current quota" in low or ("quota" in low and "billing" in low):
+        return HTTPException(
+            status_code=429,
+            detail=(
+                "Model provider quota is exhausted. "
+                "Please check your API plan/billing, then try again."
+            ),
+        )
     if "RateLimit" in name or "ResourceExhausted" in name:
         return HTTPException(status_code=429, detail=str(exc))
     if "AuthenticationError" in name or ("auth" in low and "invalid" in low):
