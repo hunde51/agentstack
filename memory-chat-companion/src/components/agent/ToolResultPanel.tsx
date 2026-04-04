@@ -20,8 +20,8 @@ export default function ToolResultPanel({ toolUsed, result }: Props) {
         </div>
         <p className="font-medium">No tool result yet</p>
         <p className="text-xs text-center leading-relaxed max-w-[200px]">
-          Send a message mentioning <strong className="text-foreground">users</strong> or{" "}
-          <strong className="text-foreground">weather</strong> to trigger a tool call
+          When the API returns structured tool output, it will show here. The chat uses the agent reply in
+          the center panel.
         </p>
       </div>
     );

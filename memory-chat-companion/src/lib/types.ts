@@ -9,8 +9,3 @@ export interface UserMemory {
   name?: string;
   likes?: string[];
 }
-
-export interface DummyUser {
-  id: string;
-  label: string;
-}

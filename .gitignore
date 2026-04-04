@@ -27,6 +27,9 @@ pnpm-debug.log*
 .env.*
 !.env.example
 
+# Local SQLite DB (backend seeds on startup)
+ai-agent-backend/app/data/*.db
+
 # Python artifacts (for backend folders)
 __pycache__/
 *.py[cod]

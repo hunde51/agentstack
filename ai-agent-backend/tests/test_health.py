@@ -1,0 +1,10 @@
+def test_health(client):
+    r = client.get("/health")
+    assert r.status_code == 200
+    assert r.json() == {"status": "ok"}
+
+
+def test_ready_ok(client):
+    r = client.get("/ready")
+    assert r.status_code == 200
+    assert r.json() == {"status": "ready"}
