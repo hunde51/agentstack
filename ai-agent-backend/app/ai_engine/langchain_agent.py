@@ -1,14 +1,14 @@
+import json
 import os
 from functools import lru_cache
 from typing import Any
 
 from dotenv import load_dotenv
-from langchain.agents import AgentExecutor, create_tool_calling_agent
+from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.tools import tool
 
 from ..service import get_users, get_weather
-
 
 load_dotenv()
 
@@ -78,12 +78,62 @@ def _get_executor() -> AgentExecutor:
         verbose=False,
         max_iterations=5,
         handle_parsing_errors=True,
+        return_intermediate_steps=True,
     )
 
 
-def run_agent(user_message: str) -> str:
+def _format_context(*, memory_context: str, chat_context: str, user_message: str) -> str:
+    parts: list[str] = []
+    if memory_context.strip():
+        parts.append(f"Long-term memory (JSON):\n{memory_context.strip()}")
+    if chat_context.strip():
+        parts.append(f"Recent conversation:\n{chat_context.strip()}")
+    parts.append(f"Current user message:\n{user_message.strip()}")
+    return "\n\n".join(parts)
+
+
+def _parse_last_tool(steps: list) -> tuple[str | None, Any]:
+    if not steps:
+        return None, None
+    tool_used: str | None = None
+    tool_result: Any = None
+    for action, observation in steps:
+        tool_used = getattr(action, "tool", None)
+        if isinstance(tool_used, str):
+            pass
+        else:
+            tool_used = str(tool_used) if tool_used is not None else None
+        tool_result = observation
+        if isinstance(observation, str):
+            try:
+                tool_result = json.loads(observation)
+            except (json.JSONDecodeError, TypeError):
+                tool_result = observation
+    return tool_used, tool_result
+
+
+def run_agent(
+    user_message: str,
+    *,
+    chat_context: str = "",
+    memory_context: str = "",
+) -> dict[str, Any]:
+    full_input = _format_context(
+        memory_context=memory_context,
+        chat_context=chat_context,
+        user_message=user_message,
+    )
     executor = _get_executor()
-    result = executor.invoke({"input": user_message})
+    result = executor.invoke({"input": full_input})
 
     output = result.get("output", "")
-    return output if isinstance(output, str) else str(output)
+    output_str = output if isinstance(output, str) else str(output)
+
+    steps = result.get("intermediate_steps") or []
+    tool_used, tool_result = _parse_last_tool(steps)
+
+    return {
+        "output": output_str,
+        "tool_used": tool_used,
+        "tool_result": tool_result,
+    }

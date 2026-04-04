@@ -1,31 +1,27 @@
 # Agent Chat + Memory
 
-## Dummy Logic
+## Frontend ↔ backend
 
-- Messages containing **"users"** → returns a dummy users list via `get_users` tool
-- Messages containing **"weather"** (+ optional city: berlin/london/tokyo/paris) → returns weather via `get_weather` tool
-- Any other message → "I selected no tool for this query."
-- Messages like **"my name is X"** or **"I like Y"** update the long-term memory panel
+- `src/lib/chatApi.ts` calls `POST /chat` with `{ user_id, message }`.
+- **Dev:** Vite proxies `/api/*` → `http://127.0.0.1:8000` (see `vite.config.ts`). The app uses `/api` as the base in development unless `VITE_API_BASE` is set.
+- **Prod / custom URL:** set `VITE_API_BASE` to your FastAPI origin (no trailing slash).
+- **`user_id`:** set `VITE_USER_ID` for a fixed id, or omit it to use a stable id per browser tab (`sessionStorage`).
 
-## Replacing Mock API
-
-1. Open `src/lib/chatApi.ts`
-2. Uncomment the `API_BASE` constant and set your FastAPI URL
-3. Replace the `sendMessage` function body with a real `fetch` call (see the TODO comment inside)
-
-## Backend Contract
+## Backend contract (current)
 
 ```
 POST /chat
 Content-Type: application/json
 
 Request:  { "user_id": "string", "message": "string" }
-Response: { "result": <users_list | weather_object | null> }
+Response: {
+  "result": "string",
+  "tool_used": "get_users" | "get_weather" | null,
+  "tool_result": <structured tool output> | null
+}
 ```
 
-Result shapes:
-- Users: `[{"id":1,"name":"Alice"}, ...]`
-- Weather: `{"city":"Berlin","forecast":"sunny","temperature_c":24}`
+The left **Memory** panel still uses client-side extraction from messages (`memoryExtractor.ts`). The backend also merges similar rules into Redis for the agent; a `GET /memory` API is not implemented yet.
 
 ## Style Guide
 

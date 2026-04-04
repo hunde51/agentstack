@@ -1,37 +1,19 @@
-import { useState, useCallback } from "react";
-import type { ChatMessage, DummyUser, UserMemory } from "@/lib/types";
+import { useState, useCallback, useMemo } from "react";
+import type { ChatMessage, UserMemory } from "@/lib/types";
 import { sendMessage } from "@/lib/chatApi";
 import { extractMemory } from "@/lib/memoryExtractor";
-import UserSwitcher from "./UserSwitcher";
+import { getStableUserId } from "@/lib/userId";
 import MemoryPanel from "./MemoryPanel";
 import ChatWindow from "./ChatWindow";
 import ToolResultPanel from "./ToolResultPanel";
 import { Bot, PanelLeftClose, PanelRightClose } from "lucide-react";
 
-const USERS: DummyUser[] = [
-  { id: "alice-001", label: "alice-001" },
-  { id: "bob-002", label: "bob-002" },
-  { id: "charlie-003", label: "charlie-003" },
-];
-
-const INITIAL_MESSAGE: ChatMessage = {
-  role: "assistant",
-  content: "Hi. I can choose tools like **get_users** and **get_weather**.",
-};
-
 export default function AppShell() {
-  const [selectedUser, setSelectedUser] = useState(USERS[0].id);
-  const [chats, setChats] = useState<Record<string, ChatMessage[]>>({
-    "alice-001": [INITIAL_MESSAGE],
-    "bob-002": [INITIAL_MESSAGE],
-    "charlie-003": [INITIAL_MESSAGE],
-  });
-  const [memories, setMemories] = useState<Record<string, UserMemory>>({
-    "alice-001": {},
-    "bob-002": {},
-    "charlie-003": {},
-  });
-  const [latestResult, setLatestResult] = useState<{ toolUsed: string | null; result: any }>({
+  const userId = useMemo(() => getStableUserId(), []);
+
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [memory, setMemory] = useState<UserMemory>({});
+  const [latestResult, setLatestResult] = useState<{ toolUsed: string | null; result: unknown }>({
     toolUsed: null,
     result: null,
   });
@@ -39,51 +21,45 @@ export default function AppShell() {
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
 
-  const currentMessages = chats[selectedUser] ?? [INITIAL_MESSAGE];
-  const currentMemory = memories[selectedUser] ?? {};
-
   const handleSend = useCallback(
     async (text: string) => {
       const userMsg: ChatMessage = { role: "user", content: text };
-      setChats((prev) => ({
-        ...prev,
-        [selectedUser]: [...(prev[selectedUser] ?? []), userMsg],
-      }));
-
-      setMemories((prev) => ({
-        ...prev,
-        [selectedUser]: extractMemory(text, prev[selectedUser] ?? {}),
-      }));
+      setMessages((prev) => [...prev, userMsg]);
+      setMemory((prev) => extractMemory(text, prev));
 
       setLoading(true);
 
-      // TODO: Replace with real API call
-      const res = await sendMessage({ user_id: selectedUser, message: text });
+      try {
+        const res = await sendMessage({ user_id: userId, message: text });
 
-      const assistantMsg: ChatMessage = {
-        role: "assistant",
-        content: res.assistantText,
-        toolUsed: res.toolUsed,
-        result: res.result,
-      };
+        const assistantMsg: ChatMessage = {
+          role: "assistant",
+          content: res.assistantText,
+          toolUsed: res.toolUsed,
+          result: res.result,
+        };
 
-      setChats((prev) => ({
-        ...prev,
-        [selectedUser]: [...(prev[selectedUser] ?? []), assistantMsg],
-      }));
+        setMessages((prev) => [...prev, assistantMsg]);
 
-      if (res.result) {
-        setLatestResult({ toolUsed: res.toolUsed, result: res.result });
+        if (res.result != null) {
+          setLatestResult({ toolUsed: res.toolUsed, result: res.result });
+        }
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : "Request failed";
+        const assistantMsg: ChatMessage = {
+          role: "assistant",
+          content: `**Error:** ${detail}`,
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     },
-    [selectedUser]
+    [userId]
   );
 
   return (
     <div className="h-screen flex flex-col agent-gradient-bg">
-      {/* Header */}
       <header className="h-14 border-b bg-card/80 backdrop-blur-md flex items-center px-4 gap-3 shrink-0" role="banner">
         <button
           onClick={() => setLeftOpen((p) => !p)}
@@ -99,9 +75,9 @@ export default function AppShell() {
           <h1 className="text-sm font-bold tracking-tight">Agent Chat</h1>
           <p className="text-[10px] text-muted-foreground font-mono leading-none">+ memory</p>
         </div>
-        <span className="text-xs text-muted-foreground font-mono ml-auto hidden sm:flex items-center gap-1.5">
-          <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-          {selectedUser}
+        <span className="text-xs text-muted-foreground font-mono ml-auto hidden sm:flex items-center gap-1.5 max-w-[min(40vw,14rem)] truncate" title={userId}>
+          <span className="h-1.5 w-1.5 rounded-full bg-accent shrink-0" />
+          {userId}
         </span>
         <button
           onClick={() => setRightOpen((p) => !p)}
@@ -113,28 +89,22 @@ export default function AppShell() {
       </header>
 
       <div className="flex flex-1 min-h-0">
-        {/* Left panel */}
         <aside
           className={`${
             leftOpen ? "w-64" : "w-0"
           } transition-all duration-200 overflow-hidden border-r bg-card/60 backdrop-blur-sm shrink-0`}
           role="complementary"
-          aria-label="User and memory panel"
+          aria-label="Memory panel"
         >
           <div className="p-4 space-y-6 w-64">
-            <UserSwitcher users={USERS} selected={selectedUser} onSelect={setSelectedUser} />
-            <div className="border-t pt-4">
-              <MemoryPanel memory={currentMemory} />
-            </div>
+            <MemoryPanel memory={memory} />
           </div>
         </aside>
 
-        {/* Center — Chat */}
         <main className="flex-1 min-w-0" role="main" aria-label="Chat conversation">
-          <ChatWindow messages={currentMessages} onSend={handleSend} loading={loading} />
+          <ChatWindow messages={messages} onSend={handleSend} loading={loading} />
         </main>
 
-        {/* Right panel */}
         <aside
           className={`${
             rightOpen ? "w-80" : "w-0"

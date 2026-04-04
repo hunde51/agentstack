@@ -20,14 +20,19 @@ def _memory_key(user_id: str) -> str:
     return f"memory:{user_id}"
 
 
+def redis_ping() -> bool:
+    try:
+        return bool(redis_client.ping())
+    except redis.RedisError:
+        return False
+
+
 def save_message(user_id: str, role: str, content: str) -> None:
-    # Store each chat message as JSON in a Redis list.
     message = {"role": role, "content": content}
     redis_client.rpush(_chat_key(user_id), json.dumps(message))
 
 
 def get_chat_history(user_id: str) -> List[Dict[str, str]]:
-    # Retrieve full user chat history in insertion order.
     raw_items = redis_client.lrange(_chat_key(user_id), 0, -1)
     history: List[Dict[str, str]] = []
     for item in raw_items:
@@ -38,7 +43,6 @@ def get_chat_history(user_id: str) -> List[Dict[str, str]]:
 
 
 def extract_memory(user_text: str) -> Dict[str, object]:
-    # Capture simple long-term facts from explicit phrases.
     updates: Dict[str, object] = {}
 
     name_match = re.search(r"\bmy name is\s+([A-Za-z][A-Za-z\s'-]{1,40})", user_text, re.IGNORECASE)
@@ -56,7 +60,6 @@ def extract_memory(user_text: str) -> Dict[str, object]:
 
 
 def save_memory(user_id: str, memory_update: Dict[str, object]) -> None:
-    # Merge new memory facts with existing memory object.
     if not memory_update:
         return
 
@@ -76,7 +79,6 @@ def save_memory(user_id: str, memory_update: Dict[str, object]) -> None:
 
 
 def get_memory(user_id: str) -> Dict[str, object]:
-    # Return a user-level memory object; empty dict if none exists.
     raw = redis_client.get(_memory_key(user_id))
     if not raw:
         return {}
